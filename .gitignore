@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+*.log
+.vite-hooks/
+
+# 父仓 .gitignore 有 .env.*,这里放行示例文件
+!.env.example
+
+# Playwright / 临时产物
+.playwright-mcp/

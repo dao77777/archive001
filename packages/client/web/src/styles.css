@@ -1,0 +1,177 @@
+@import "tailwindcss";
+
+/* 唯一美术参照:「科罗廖夫十字绽开」—— 近白纸 + 近黑墨 + 一枚砖红 + 1px 细线。
+   拆解与实测见 docs/designs/client/web/style-references.md */
+
+@theme {
+  --color-paper: #fbfaf9;
+  --color-paper-hi: #ffffff;
+  --color-ink: #141414;
+  --color-muted: #625958;
+  --color-rule: #c8c4c3;
+  --color-signal: #a02b30;
+  /* 暗底上的红要更亮:同一语义,不同明度 */
+  --color-signal-hi: #d05155;
+
+  --font-display:
+    ui-sans-serif, system-ui, -apple-system, "PingFang SC", "Hiragino Sans GB", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "PingFang SC", "Hiragino Sans GB", sans-serif;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* 数字用衬线:借参照里"1948 / 100"那种仪表感,只此一处 */
+  .numeral {
+    font-family: ui-serif, "Times New Roman", serif;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* 归档标签:等宽、大写、疏排 */
+  .label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+
+  .rule {
+    border-color: var(--color-rule);
+  }
+
+  /* 输入 / 下拉:方角、发丝线、纸色 */
+  /* 发丝辅助线:两端淡出。这是本套界面唯一的"线"画法 —— 线只做标记,永远不围出没有出口的框 */
+  .hairline {
+    height: 1px;
+    background-image: linear-gradient(
+      to right,
+      transparent,
+      var(--color-rule) 10%,
+      var(--color-rule) 90%,
+      transparent
+    );
+  }
+
+  /* 输入 / 下拉:没有框,只有一条两端淡出的底线;聚焦时这条线变墨 */
+  .field {
+    background-color: transparent;
+    background-image: linear-gradient(
+      to right,
+      transparent,
+      var(--color-rule) 8%,
+      var(--color-rule) 92%,
+      transparent
+    );
+    background-repeat: no-repeat;
+    background-size: 100% 1px;
+    background-position: 0 100%;
+    border: 0;
+    border-radius: 0;
+    color: var(--color-ink);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 4px 2px;
+    outline: none;
+  }
+
+  .field:focus,
+  .field[data-popup-open] {
+    background-image: linear-gradient(
+      to right,
+      transparent,
+      var(--color-ink) 8%,
+      var(--color-ink) 92%,
+      transparent
+    );
+  }
+
+  /* 底栏状态栏的裸控件:没有框、没有底色 —— 视觉上不像控件,但仍然可点、可聚焦。
+     可点性只靠一条发丝下划线表达:hover 变灰线,聚焦变墨线,其余时候什么都没有。 */
+  .bare-input {
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid transparent;
+    border-radius: 0;
+    padding: 0 0 1px;
+    color: var(--color-ink);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.02em;
+    outline: none;
+  }
+
+  .bare-input:hover {
+    border-bottom-color: var(--color-rule);
+  }
+
+  .bare-input:focus,
+  .bare-input[data-popup-open] {
+    border-bottom-color: var(--color-ink);
+  }
+
+  .bare-btn {
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid transparent;
+    border-radius: 0;
+    padding: 0 0 1px;
+    color: var(--color-muted);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+
+  .bare-btn:hover,
+  .bare-btn:focus-visible {
+    color: var(--color-ink);
+    border-bottom-color: var(--color-ink);
+  }
+
+  /* 底栏状态栏的裸控件:没有框、没有底色 —— 视觉上不像控件,但仍然可点、可聚焦。
+     可点性只靠一条发丝下划线表达:hover 变灰线,聚焦变墨线,其余时候什么都没有。 */
+}
+
+/** 主体:呼吸;卡片:被抽出一点又落回(反复)—— 档案在动,而不是火箭在转 */
+@keyframes mark-breathe {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+@keyframes mark-lift {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  45% {
+    transform: translateY(-10px);
+  }
+}
+
+.mark {
+  animation: mark-breathe 6s ease-in-out infinite;
+}
+
+.mark-card {
+  animation: mark-lift 7s cubic-bezier(0.6, 0, 0.4, 1) infinite;
+}

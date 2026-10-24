@@ -1,0 +1,22 @@
+{
+  "name": "@archive001/agent",
+  "version": "0.5.0",
+  "private": true,
+  "description": "archive001 的 agent 内核:SDK(Effect)。CLI 与各客户端在 packages/client/。",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./builtin-tools": "./src/loop/builtin-tools.ts"
+  },
+  "scripts": {
+    "build": "vp pack"
+  },
+  "dependencies": {
+    "@effect/platform-node": "^4.0.5",
+    "effect": "^4.0.5"
+  },
+  "devDependencies": {
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
+  }
+}

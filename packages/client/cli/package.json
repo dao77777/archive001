@@ -1,0 +1,24 @@
+{
+  "name": "@archive001/cli",
+  "version": "0.5.0",
+  "private": true,
+  "description": "archive001 的一次性 CLI:跑一个 prompt 就退出,给脚本用。只依赖 @archive001/agent 的 SDK。",
+  "bin": {
+    "archive001": "./src/main.ts"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "node src/main.ts",
+    "start": "node dist/main.mjs",
+    "build": "vp pack"
+  },
+  "dependencies": {
+    "@archive001/agent": "workspace:*",
+    "@effect/platform-node": "^4.0.5",
+    "effect": "^4.0.5"
+  },
+  "devDependencies": {
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
+  }
+}

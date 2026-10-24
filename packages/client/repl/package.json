@@ -1,0 +1,23 @@
+{
+  "name": "@archive001/repl",
+  "version": "0.5.0",
+  "private": true,
+  "description": "archive001 的 REPL 客户端(终端交互)。只依赖 @archive001/agent 的 SDK。",
+  "type": "module",
+  "scripts": {
+    "dev": "node src/main.ts",
+    "watch": "node --watch src/main.ts",
+    "start": "node dist/main.mjs",
+    "smoke": "node scripts/smoke.ts",
+    "build": "vp pack"
+  },
+  "dependencies": {
+    "@archive001/agent": "workspace:*",
+    "@effect/platform-node": "^4.0.5",
+    "effect": "^4.0.5"
+  },
+  "devDependencies": {
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
+  }
+}
