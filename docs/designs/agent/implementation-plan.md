@@ -1,6 +1,7 @@
 # 实施计划:常驻循环 + archive
 
-> 状态:**未开始**(实现过一次又整体回滚,见 `~/Code/_lab/archive001-impl-snapshot-2026-10-24/`)。
+> 状态:**进行中**(Phase 0 完成)。此前实现过一次并整体回滚,那版留在
+> `~/Code/_lab/archive001-impl-snapshot-2026-10-24/`(可 `rsync` 回去对照)。
 > 目标设计:[`live-loop.md`](live-loop.md) + [`archive.md`](archive.md);决策背景 [`../../decisions/0008`](../../decisions/0008-archive-persisted.md)。
 >
 > **进度**:Phase 0 ✅(`c05b3c9`,2026-10-24)· Phase 1–7 未开始。
