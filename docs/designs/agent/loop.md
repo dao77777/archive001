@@ -1,8 +1,6 @@
 # 设计:agent 循环
 
 > 路径 `packages/agent/src/loop/`。模型层见 [`llm.md`](llm.md);跨包结构见 [`../overview.md`](../overview.md)。
-> ⚠️ 本文件描述**当前实现**(一次 `run` = 一次请求)。下一版形态是常驻事件循环,见
-> [`live-loop.md`](live-loop.md)(未实现,尚未覆盖本节)。
 
 ## 职责
 
@@ -83,8 +81,6 @@ interface AgentShape {
 - 放在 `Ref<ReadonlyArray<Item>>`,跨轮记忆。
 - 写入的只有 `user` 与最终 `assistant` 的**正文**。
 - ⚠️ **`reasoning` 不回喂模型**(只服务单次 run 的 UI);空答复也不写(会毒死会话)。
-  下一版会把它当普通条目记进 archive(见 [`archive.md`](archive.md)、[`../../decisions/0008`](../../decisions/0008-archive-persisted.md)),
-  但**仍不回喂**。
 
 ## 工具
 
@@ -95,8 +91,3 @@ interface AgentShape {
 ## 暂未做
 
 流式输出 · 工具并发 · 上下文压缩 / 摘要 · 沙箱 · 多轮规划器。想法先记到 `docs/drafts/`。
-
-## 下一版
-
-`run` 改成**永不返回的循环**(信箱进、事件流出、一拍一次模型调用)的完整设计见
-[`live-loop.md`](live-loop.md)。

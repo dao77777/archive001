@@ -1,11 +1,11 @@
 # 决策:archive 落盘,`reasoning` 与其它条目同等记录
 
-> 已接受 · 2026-10-22 · 所属设计 [`../designs/agent/archive.md`](../designs/agent/archive.md) · 落点 `loop/archive.ts` · `AGENTS.md`
+> 已接受 · 2026-10-22 · **方案已撤回**(对应的设计与实施计划已删除,本条只作存档;原落点 `loop/archive.ts`)
 > **推翻**原 `AGENTS.md` 里「不要持久化 `reasoning`」那条(那份文件现在只描述现状,不再罗列禁令)。
 
 ## 矛盾
 
-[[archive 设计](../designs/agent/archive.md)] 要的是"内核状态只有一份 append-only 日志,其余全是投影",
+当时的设计要的是"内核状态只有一份 append-only 日志,其余全是投影",
 而旧规矩给 `reasoning` 开了唯一一个例外:**可以看见,但不许记下来**。
 
 | 要求                 | 旧规矩下的冲突                                                            |

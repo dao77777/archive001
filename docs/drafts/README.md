@@ -9,8 +9,9 @@
 - **上下文压缩**:超过 N 条时让模型总结早期消息
 - **工具并发执行**(`Effect.all({ concurrency })`)
 - **`effect/cli` 子命令**(`run` / `chat` / `tools`)
-- **JSONL 会话持久化** → 已定设计:[`../designs/agent/archive.md`](../designs/agent/archive.md)(archive 落盘,含 reasoning)。剩下的是落地。
+- **JSONL 会话持久化**:把多轮 `Item[]` 落盘;`reasoning` 要不要一起存、落盘前怎么处理,见
+  [`../decisions/0008`](../decisions/0008-archive-persisted.md)(那条决策还成立,只是没有设计了)。
 - **Responses 的内置工具**(web_search / file_search / code_interpreter):
   需要给 `llm/responses.ts` 的 `toItems` 加分支,并想清楚这些 item 怎么回放
-- **重放历史里的 reasoning 到模型**:目前跨轮历史不带思维链(`remember` 里不写)。archive 已经记下了,
-  要不要回喂、回喂哪几轮,是**策略**问题(成本 vs 收益),不是实现问题 —— 改 `historyOf` 一行。
+- **重放历史里的 reasoning 到模型**:目前跨轮历史不带思维链(`remember` 里不写)。
+  要不要带、带哪几轮,是**策略**问题(成本 vs 收益),不是实现问题。

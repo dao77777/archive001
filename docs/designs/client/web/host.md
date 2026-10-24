@@ -93,7 +93,6 @@ NodeHttpServer ─► HttpRouter(FindMyWay)
 
 - **流式 token**:事件粒度是"一步"(thinking / tool_call / …),不做逐字流;要做另开 draft。
 - **多会话 / 持久化**:一个进程一个会话,不落盘;`reset` 会打断在飞的那一轮。
-  (下一版会话会落盘并且可重生,见 [`../../agent/archive.md`](../../agent/archive.md) / [`../../../decisions/0008-archive-persisted.md`](../../../decisions/0008-archive-persisted.md)。)
 - **工具审批**:已决定不做,所以宿主目前只在本机回环上跑。
 - **单元测试 HTTP 层**:目前只测 `_util.ts` 的判定;要给路由写集成测试用
   `NodeHttpServer.layerTest`(临时端口 + fetch 客户端)。

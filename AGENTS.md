@@ -41,9 +41,7 @@ sops exec-env ~/Code/_vault/env/secrets.enc.yaml 'pnpm smoke max'   # 档位走�
   `list_dir` 在 `loop/builtin-tools.ts`(SDK 子路径 `@archive001/agent/builtin-tools`,依赖 Node,浏览器别 import),
   想要才传。自造工具用 `makeTool({...})`,参数写 Effect Schema(同时产出 JSON Schema 与运行时校验)。
 - **密钥从 `~/Code/_vault` 取**,用 `sops exec-env` 注入;内核与 llm 层不读环境变量,env → `LlmSettings` 在客户端那层做。
-- **状态暂存在 `Ref<Item[]>`**(多轮历史);下一版是 archive(append-only,落盘),见
-  [`docs/designs/agent/archive.md`](docs/designs/agent/archive.md)。
-  落盘后文件里是**明文**(思维链 + 工具 stdout),路径与权限见该文档的「持久化」节。
+- **状态暂存在 `Ref<Item[]>`**(多轮历史,跨轮记忆),不落盘。
 - **Web 客户端的密钥只在本地宿主**(`src/host/`,从 env 读),浏览器只发模型 / 档位;宿主目前只绑本机回环,
   因为工具没有审批。细节见 [`docs/designs/client/web/host.md`](docs/designs/client/web/host.md)。
 - **REPL 的输入用 `node:readline/promises`**:effect 的 `Terminal.readLine` 实现给 TTY 开 raw mode 却不给
@@ -51,12 +49,10 @@ sops exec-env ~/Code/_vault/env/secrets.enc.yaml 'pnpm smoke max'   # 档位走�
 
 ## 文档去哪
 
-| 想知道                     | 看                                                                                                                                      |
-| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| 两层怎么设计               | [`docs/designs/agent/loop.md`](docs/designs/agent/loop.md) · [`docs/designs/agent/llm.md`](docs/designs/agent/llm.md)                   |
-| 下一版(常驻循环 / archive) | [`docs/designs/agent/live-loop.md`](docs/designs/agent/live-loop.md) · [`docs/designs/agent/archive.md`](docs/designs/agent/archive.md) |
-| 怎么一步步实现             | [`docs/designs/agent/implementation-plan.md`](docs/designs/agent/implementation-plan.md)                                                |
-| 代码现在怎么写             | [`docs/designs/code-conventions.md`](docs/designs/code-conventions.md)                                                                  |
-| DeepSeek 报文 / 回放实测   | [`docs/knowledge/deepseek-api.md`](docs/knowledge/deepseek-api.md)                                                                      |
-| 为什么这么定               | [`docs/decisions/`](docs/decisions/)                                                                                                    |
-| 现在到哪了                 | [`docs/progress/status.md`](docs/progress/status.md)                                                                                    |
+| 想知道                   | 看                                                                                                                    |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| 两层怎么设计             | [`docs/designs/agent/loop.md`](docs/designs/agent/loop.md) · [`docs/designs/agent/llm.md`](docs/designs/agent/llm.md) |
+| 代码现在怎么写           | [`docs/designs/code-conventions.md`](docs/designs/code-conventions.md)                                                |
+| DeepSeek 报文 / 回放实测 | [`docs/knowledge/deepseek-api.md`](docs/knowledge/deepseek-api.md)                                                    |
+| 为什么这么定             | [`docs/decisions/`](docs/decisions/)                                                                                  |
+| 现在到哪了               | [`docs/progress/status.md`](docs/progress/status.md)                                                                  |
