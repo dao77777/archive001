@@ -2,6 +2,8 @@
 
 > 状态:**未开始**(实现过一次又整体回滚,见 `~/Code/_lab/archive001-impl-snapshot-2026-10-24/`)。
 > 目标设计:[`live-loop.md`](live-loop.md) + [`archive.md`](archive.md);决策背景 [`../../decisions/0008`](../../decisions/0008-archive-persisted.md)。
+>
+> **进度**:Phase 0 ✅(`c05b3c9`,2026-10-24)· Phase 1–7 未开始。
 
 ## 依赖顺序(决定了阶段划分)
 
