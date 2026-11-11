@@ -1,5 +1,5 @@
 // llm 层的常量:厂商名、两条 wire 的端点、缺省行为参数。
-// 循环层的常量在 `../loop/_constants.ts`。
+// 循环层的常量跟着各服务走(`loop/<服务>/live.ts`),没有集中的常量表。
 
 import type { BehaviorSettings, Wire } from "./_domain.ts";
 

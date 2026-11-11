@@ -1,12 +1,14 @@
 // `/api/*`:三条路由。业务只在这里;准入在 `./guard.ts`。
 //
-//   GET  /api/state  密钥在不在、工具能碰哪个目录 —— **不要求令牌**(它就是握手)
-//   POST /api/turn   一次请求 = 一条 NDJSON 事件流(见 `./session.ts`)
-//   POST /api/reset  换一套服务端实例(清历史)
+//   GET  /api/state          密钥在不在、工具能碰哪个目录 —— **不要求令牌**(它就是握手)
+//   GET  /api/sessions       会话列表 + 当前会话
+//   POST /api/sessions/open  切到某个会话,返回它的原始条目
+//   POST /api/turn           一次请求 = 一条 NDJSON 事件流(见 `./session.ts`)
+//   POST /api/reset          换一套服务端实例 + 开新 archive 会话
 //
 // 密钥只在宿主读;**读不到也不拒绝启动**,只是 `/api/state` 会说 hasKey=false。
 
-import { type LlmSettings } from "@archive001/agent";
+import { makeSessionId, type LlmSettings } from "@archive001/agent";
 import { Effect, Layer, Redacted, Stream } from "effect";
 import {
   HttpRouter,
@@ -15,7 +17,7 @@ import {
   HttpServerResponse,
 } from "effect/http";
 import { API_PREFIX, ENV_API_KEY, ENV_API_KEY_FALLBACK, MAX_BODY_BYTES } from "./_constants.ts";
-import { TurnBodySchema } from "./_domain.ts";
+import { OpenSessionBodySchema, TurnBodySchema } from "./_domain.ts";
 import { encodeNdjsonLine } from "./_util.ts";
 import { RequireToken } from "./guard.ts";
 import { Session } from "./session.ts";
@@ -70,11 +72,40 @@ const turn = HttpRouter.add("POST", `${API_PREFIX}/turn`, (request: Request.Http
   }),
 );
 
+const sessions = HttpRouter.add("GET", `${API_PREFIX}/sessions`, () =>
+  Effect.gen(function* () {
+    const session = yield* Session;
+    return HttpServerResponse.jsonUnsafe({
+      current: yield* session.current,
+      sessions: yield* session.sessions,
+    });
+  }),
+);
+
+const openSession = HttpRouter.add(
+  "POST",
+  `${API_PREFIX}/sessions/open`,
+  (request: Request.HttpServerRequest) =>
+    Effect.gen(function* () {
+      if (Number(request.headers["content-length"] ?? 0) > MAX_BODY_BYTES) {
+        return HttpServerResponse.jsonUnsafe({ error: "请求体太大" }, { status: 413 });
+      }
+      const body = yield* HttpServerRequest.schemaBodyJson(OpenSessionBodySchema);
+      const id = body.id.trim();
+      if (id.length === 0) return badRequest("id 不能为空");
+
+      const session = yield* Session;
+      const sessionId = makeSessionId(id);
+      const entries = yield* session.open(sessionId);
+      return HttpServerResponse.jsonUnsafe({ ok: true, id: sessionId, entries });
+    }),
+);
+
 const reset = HttpRouter.add("POST", `${API_PREFIX}/reset`, () =>
   Effect.gen(function* () {
     const session = yield* Session;
-    yield* session.reset;
-    return HttpServerResponse.jsonUnsafe({ ok: true });
+    const id = yield* session.reset;
+    return HttpServerResponse.jsonUnsafe({ ok: true, id });
   }),
 );
 
@@ -90,7 +121,8 @@ const notFound = HttpRouter.add(
  * 它的响应里带着 cookie(见 `./guard.ts` 的 `Guard`)。
  */
 export const ApiRoutes = Layer.mergeAll(
-  Layer.mergeAll(turn, reset).pipe(Layer.provide(RequireToken)),
+  Layer.mergeAll(turn, reset, openSession).pipe(Layer.provide(RequireToken)),
   state,
+  sessions,
   notFound,
 );

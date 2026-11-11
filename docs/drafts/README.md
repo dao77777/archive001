@@ -13,5 +13,5 @@
   [`../decisions/0008`](../decisions/0008-archive-persisted.md)(那条决策还成立,只是没有设计了)。
 - **Responses 的内置工具**(web_search / file_search / code_interpreter):
   需要给 `llm/responses.ts` 的 `toItems` 加分支,并想清楚这些 item 怎么回放
-- **重放历史里的 reasoning 到模型**:目前跨轮历史不带思维链(`remember` 里不写)。
-  要不要带、带哪几轮,是**策略**问题(成本 vs 收益),不是实现问题。
+- **重放历史里的 reasoning 到模型**:现在工具轮的 reasoning 会随 `function_call` 一起留在 transcript(回放契约要求),
+  纯问答轮仍不带。要不要把纯问答轮的思维链也回喂、带哪几轮,是**策略**问题(成本 vs 收益),不是实现问题。

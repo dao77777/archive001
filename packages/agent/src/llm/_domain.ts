@@ -1,9 +1,8 @@
-// llm 层的类型与 Schema(不含函数):思考档位、对话 item、wire 选择、工具定义、
-// 错误、服务形状、HTTP 信封、两条 wire 的报文 Schema。
-// 函数在 `./_util.ts`,常量在 `./_constants.ts`。
+// llm 层的类型与 Schema(不含函数):思考档位、对话 item、设置、工具定义、错误、HTTP 信封、
+// 两条 wire 的报文 Schema。服务形状在 `./service.ts`,实现分别在 `./live.ts` 与 `./wire/`。
 
 import { Data, Schema } from "effect";
-import type { Effect, Redacted } from "effect";
+import type { Redacted } from "effect";
 import type { HttpClient } from "effect/http";
 
 // ---------------------------------------------------------------------------
@@ -26,33 +25,33 @@ export type ThinkingLevel = typeof ThinkingLevel.Type;
  * 一条对话 item。**这就是本项目的主模型**:`/responses` 的 `input[]` 几乎能直接映射,
  * `/chat/completions` 则是把 item 折叠成 message 的兼容路径(见 `chat-completions.ts`)。
  *
- * | Item                   | Responses wire                                   | chat/completions wire              |
- * | ---------------------- | ------------------------------------------------ | ---------------------------------- |
- * | `message`              | `{type:"message", role, content:[…text]}`         | `{role, content}`                  |
- * | `reasoning`            | `{type:"reasoning", content:[{reasoning_text}]}`  | assistant 上的 `reasoning_content` |
- * | `function_call`        | `{type:"function_call", call_id, name, args}`     | assistant 上的 `tool_calls[]`      |
- * | `function_call_output` | `{type:"function_call_output", call_id, output}`  | `{role:"tool", tool_call_id, …}`   |
+ * 角色直接编进 `type`:一个 `type` 既是角色也是内容形状。
  *
- * 字段名用 TS 风格(camelCase),`type` 与 wire 同名 —— 差异只在适配器里那几行映射。
+ * | Item                    | Responses wire                                   | chat/completions wire              |
+ * | ----------------------- | ------------------------------------------------ | ---------------------------------- |
+ * | `SYSTEM_MESSAGE`        | 顶层 `instructions`                              | `{role:"system", content}`         |
+ * | `USER_MESSAGE`          | `{type:"message", role:"user", …}`               | `{role:"user", content}`           |
+ * | `ASSISTANT_MESSAGE`     | `{type:"message", role:"assistant", …}`          | assistant 的 `content`             |
+ * | `REASONING`             | `{type:"reasoning", content:[{reasoning_text}]}` | assistant 上的 `reasoning_content` |
+ * | `FUNCTION_CALL`         | `{type:"function_call", call_id, name, args}`    | assistant 上的 `tool_calls[]`      |
+ * | `FUNCTION_CALL_OUTPUT`  | `{type:"function_call_output", call_id, output}` | `{role:"tool", tool_call_id, …}`   |
  */
 export type Item =
+  | { readonly type: "SYSTEM_MESSAGE"; readonly text: string }
+  | { readonly type: "USER_MESSAGE"; readonly text: string }
+  | { readonly type: "ASSISTANT_MESSAGE"; readonly text: string }
+  | { readonly type: "REASONING"; readonly text: string }
   | {
-      readonly type: "message";
-      readonly role: "system" | "user" | "assistant";
-      readonly text: string;
-    }
-  | { readonly type: "reasoning"; readonly text: string }
-  | {
-      readonly type: "function_call";
+      readonly type: "FUNCTION_CALL";
       readonly callId: string;
       readonly name: string;
       /** 模型给的参数,原样 JSON 字符串;解析与校验在 `tools.ts` */
       readonly arguments: string;
     }
-  | { readonly type: "function_call_output"; readonly callId: string; readonly output: string };
+  | { readonly type: "FUNCTION_CALL_OUTPUT"; readonly callId: string; readonly output: string };
 
 /** 工具调用 item 的别名(`functionCallsOf` 的元素类型)。 */
-export type FunctionCall = Extract<Item, { readonly type: "function_call" }>;
+export type FunctionCall = Extract<Item, { readonly type: "FUNCTION_CALL" }>;
 
 // ---------------------------------------------------------------------------
 // wire 选择
@@ -79,29 +78,14 @@ export interface ToolDefinition {
 // 错误
 // ---------------------------------------------------------------------------
 
-export class LlmError extends Data.TaggedError("LlmError")<{
+export class LlmError extends Data.TaggedError("LLM_ERROR")<{
   readonly message: string;
   readonly cause?: unknown;
 }> {}
 
 // ---------------------------------------------------------------------------
-// Llm 服务的形状与依赖
+// wire 适配器的依赖
 // ---------------------------------------------------------------------------
-
-export interface LlmShape {
-  /**
-   * 调一次模型:给完整 item 历史 + 本次的 `settings`,拿回本轮**产出的 item**
-   * (思维链 / 正文 / 工具调用)。
-   *
-   * `settings` 是**每次调用**的参数,不是装配参数 —— 所以同一个 `Llm` 可以被不同调用
-   * 用不同模型 / 档位 / wire 打(比如以后"便宜的分类调用 + 贵的推理调用")。
-   */
-  readonly complete: (
-    items: ReadonlyArray<Item>,
-    tools: ReadonlyArray<ToolDefinition>,
-    settings: LlmSettings,
-  ) => Effect.Effect<ReadonlyArray<Item>, LlmError>;
-}
 
 /**
  * 一次调用的**全部**设置:行为参数 + 连接事实。

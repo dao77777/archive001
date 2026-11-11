@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // **CLI 客户端**:一次性跑一个 prompt,给"不想写代码"的客户端用(含 shell 脚本)。
 // 它和 repl / web / tui 一样是**客户端**:只依赖 `@archive001/agent` 的 SDK,
-// 内核不认识它(以前这个文件躺在内核包里,现在搬出来)。
+// 内核不认识它:本包只消费 SDK。
 //
 //   archive001 "列出当前目录"                           文本模式:事件流 + 最终答复
 //   archive001 --json "列出当前目录"                    NDJSON:每行一个事件,最后一行是答复
@@ -13,17 +13,15 @@
 // 交互式客户端(REPL / TUI)是另外的包;它们直接 import SDK,不走这个 CLI。
 
 import process from "node:process";
-import { Effect, Layer, Redacted, Schema } from "effect";
+import { Effect, Layer, Option, Redacted, Schema } from "effect";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Agent, AgentLive, formatError, LlmLive, ThinkingLevel } from "@archive001/agent";
-import type { AgentEvent, LlmSettings } from "@archive001/agent";
-import { BuiltinTools, BuiltinToolsLive } from "@archive001/agent/builtin-tools";
+import { Archive, formatError, ThinkingLevel, Turn } from "@archive001/agent";
+import { AgentLive } from "@archive001/agent/live";
+import type { ArchiveEntry, LlmSettings } from "@archive001/agent";
 import { ENV_API_KEY, ENV_API_KEY_FALLBACK } from "./_constants.ts";
 
-/** 组装 Agent:核心只需要 `Llm`;`Llm` 不读配置,设置每次 `run` 传。 */
-const AgentWithDeps = Layer.provide(LlmLive)(AgentLive);
-const ToolsWithPlatform = Layer.provide(NodeServices.layer)(BuiltinToolsLive);
-const AppLive = Layer.mergeAll(AgentWithDeps, ToolsWithPlatform, NodeServices.layer);
+/** `AgentLive` 自带 `Llm` / 文件 archive / 内置工具;平台服务留给本进程自己用。 */
+const AppLive = Layer.mergeAll(AgentLive, NodeServices.layer);
 
 type Output = "text" | "json";
 
@@ -124,34 +122,70 @@ const settingsFrom = (flags: SettingsFlags): Effect.Effect<LlmSettings, string> 
     };
   });
 
-/** 文本模式下每个事件一行;JSON 模式直接复用 `AgentEvent` 的形状。 */
-const renderText = (event: AgentEvent): string => {
-  switch (event._tag) {
-    case "thinking":
-      return `[思考] ${event.text}`;
-    case "text":
-      return `[说] ${event.text}`;
-    case "tool_call":
-      return `[调用] ${event.name} ${event.arguments}`;
-    case "tool_result":
-      return `[结果] ${event.output}`;
-  }
-};
+/**
+ * 文本模式渲染:正文先缓冲,遇到 tool.call 才作为"宣告"打印;
+ * 最后一步没有 tool.call,它的正文是最终回答,由 `runTurn` 返回后统一打印。
+ */
+const makeTextRenderer =
+  (print: (line: string) => Effect.Effect<void>) =>
+  (event: ArchiveEntry): Effect.Effect<void> => {
+    let pending = "";
+    let hasTool = false;
+
+    return event._tag === "STEP_START"
+      ? Effect.sync(() => {
+          pending = "";
+          hasTool = false;
+        })
+      : event._tag === "ASSISTANT_MESSAGE"
+        ? Effect.sync(() => {
+            pending += event.text;
+          })
+        : event._tag === "FUNCTION_CALL"
+          ? Effect.gen(function* () {
+              hasTool = true;
+              if (pending.length > 0) {
+                yield* print(`[说] ${pending}`);
+                pending = "";
+              }
+              yield* print(`[调用] ${event.name} ${event.arguments}`);
+            })
+          : event._tag === "STEP_END"
+            ? Effect.gen(function* () {
+                if (hasTool && pending.length > 0) yield* print(`[说] ${pending}`);
+                pending = "";
+                hasTool = false;
+              })
+            : event._tag === "REASONING"
+              ? print(`[思考] ${event.text}`)
+              : event._tag === "INBOX_OFFER" && event.message._tag === "FUNCTION_CALL_OUTPUT"
+                ? print(`[结果] ${event.message.payload.output}`)
+                : Effect.void;
+  };
 
 const runOnce = (prompt: string, output: Output, flags: SettingsFlags) =>
   Effect.gen(function* () {
-    const agent = yield* Agent;
-    const tools = yield* BuiltinTools;
+    const turn = yield* Turn;
+    const archive = yield* Archive;
     const settings = yield* settingsFrom(flags);
 
-    const print = (line: string) => Effect.sync(() => void process.stdout.write(`${line}\n`));
-    const observe = (event: AgentEvent) =>
-      print(output === "json" ? JSON.stringify(event) : renderText(event));
+    // 一次 CLI = 一段新会话;archive 里的其它会话不受影响
+    yield* archive.startSession;
 
-    const answer = yield* agent.run(prompt, settings, tools, observe);
-    yield* print(output === "json" ? JSON.stringify({ _tag: "answer", text: answer }) : answer);
+    const print = (line: string) => Effect.sync(() => void process.stdout.write(`${line}\n`));
+    const renderText = makeTextRenderer(print);
+    const onEvent =
+      output === "json" ? (event: ArchiveEntry) => print(JSON.stringify(event)) : renderText;
+
+    // 一次 CLI = 一轮:runTurn 自己起 run、跑完关掉
+    const answer = yield* turn.runTurn(
+      { settings, tools: Option.none() },
+      { text: prompt },
+      { onEvent },
+    );
+    yield* print(output === "json" ? JSON.stringify({ _tag: "ANSWER", text: answer }) : answer);
   }).pipe(
-    Effect.catchTag("LlmError", (error) =>
+    Effect.catchTag("LLM_ERROR", (error) =>
       Effect.sync(() => {
         process.stderr.write(`出错了:${formatError(error)}\n`);
         process.exitCode = 1;

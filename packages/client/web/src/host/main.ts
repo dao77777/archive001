@@ -2,7 +2,7 @@
 // **Web 客户端自己的后端**(本地 Host):浏览器只负责画,模型调用与工具都在这里跑。
 //
 //   浏览器 ── POST /api/turn (NDJSON 事件流) ──► 这里 ──► DeepSeek
-//                                              └─ agent.run(…, BuiltinTools)
+//                                              └─ Agent.run.events / send
 //
 // 为什么要这一层:内置工具依赖 `node:fs` / `child_process`,浏览器跑不了;而且密钥不该进浏览器。
 //

@@ -92,18 +92,18 @@ export const itemsOfType = <T extends Item["type"]>(
 ): ReadonlyArray<Extract<Item, { readonly type: T }>> =>
   items.filter((item): item is Extract<Item, { readonly type: T }> => item.type === type);
 
-/** 各条 `message` 的文本(按出现顺序,含 `assistant` 与 `user`;空串已滤掉)。 */
-export const messageTextsOf = (items: ReadonlyArray<Item>): ReadonlyArray<string> =>
-  itemsOfType(items, "message")
+/** 各条 `ASSISTANT_MESSAGE` 的文本(按出现顺序;空串已滤掉)。 */
+export const assistantTextsOf = (items: ReadonlyArray<Item>): ReadonlyArray<string> =>
+  itemsOfType(items, "ASSISTANT_MESSAGE")
     .map((item) => item.text)
     .filter((text) => text.length > 0);
 
-/** 各条 `reasoning` 的文本(按出现顺序)。 */
+/** 各条 `REASONING` 的文本(按出现顺序)。 */
 export const reasoningTextsOf = (items: ReadonlyArray<Item>): ReadonlyArray<string> =>
-  itemsOfType(items, "reasoning")
+  itemsOfType(items, "REASONING")
     .map((item) => item.text)
     .filter((text) => text.length > 0);
 
 /** 本轮产出的工具调用。 */
 export const functionCallsOf = (items: ReadonlyArray<Item>): ReadonlyArray<FunctionCall> =>
-  itemsOfType(items, "function_call");
+  itemsOfType(items, "FUNCTION_CALL");

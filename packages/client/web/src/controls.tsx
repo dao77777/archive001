@@ -5,6 +5,7 @@ import { Dialog } from "@base-ui-components/react/dialog";
 import { Field } from "@base-ui-components/react/field";
 import { Select } from "@base-ui-components/react/select";
 import type { ReactNode } from "react";
+import type { SessionSummary } from "./use-agent.ts";
 
 /** `box` = 表单里的方框字段;`bare` = 状态栏里的裸字段(标签与值并排、没有框)。 */
 export type FieldVariant = "box" | "bare";
@@ -81,6 +82,81 @@ const Row = ({ label, children }: { readonly label: string; readonly children: R
   </div>
 );
 
+/** 会话列表:archive 里的多段会话,最近活动在前。 */
+export const SessionsDialog = ({
+  open,
+  onOpenChange,
+  sessions,
+  currentSession,
+  onOpen,
+  onNew,
+}: {
+  readonly open: boolean;
+  readonly onOpenChange: (next: boolean) => void;
+  readonly sessions: ReadonlyArray<SessionSummary>;
+  readonly currentSession: string | null;
+  readonly onOpen: (id: string) => void;
+  readonly onNew: () => void;
+}) => (
+  <Dialog.Root open={open} onOpenChange={onOpenChange}>
+    <Dialog.Portal>
+      <Dialog.Backdrop className="fixed inset-0 z-40 bg-ink/25" />
+      <Dialog.Popup className="fixed top-1/2 left-1/2 z-50 w-[min(92vw,560px)] -translate-x-1/2 -translate-y-1/2 bg-paper-hi px-6 pt-6 pb-6 shadow-[0_34px_80px_-30px_rgba(0,0,0,0.5)]">
+        <div aria-hidden="true" className="hairline absolute inset-x-0 top-0" />
+        <Dialog.Title className="font-display text-2xl leading-none font-bold tracking-tight">
+          会话
+        </Dialog.Title>
+        <Dialog.Description className="label mt-2">
+          archive 里的记录 · 最近活动在前
+        </Dialog.Description>
+
+        <div className="mt-5 max-h-[52vh] overflow-y-auto">
+          {sessions.length === 0 ? (
+            <p className="py-6 text-[12px] text-muted">还没有会话,直接从下面开一段。</p>
+          ) : (
+            sessions.map((session) => (
+              <button
+                key={session.id}
+                type="button"
+                onClick={() => onOpen(session.id)}
+                className={`flex w-full items-baseline gap-3 border-b border-rule/40 px-1 py-3 text-left hover:bg-ink/[0.04] ${
+                  session.id === currentSession ? "bg-ink/[0.06]" : ""
+                }`}
+              >
+                <span className="label w-8 shrink-0">
+                  {session.id === currentSession ? "当前" : ""}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px] text-ink">{session.title}</span>
+                  <span className="label mt-1 block">
+                    {session.entries} 条
+                    {session.at === 0
+                      ? ""
+                      : ` · ${new Date(session.at).toLocaleString("zh-CN", {
+                          month: "2-digit",
+                          day: "2-digit",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}`}
+                  </span>
+                </span>
+                <span className="label font-mono text-muted">{session.id.slice(0, 8)}</span>
+              </button>
+            ))
+          )}
+        </div>
+
+        <div className="mt-5 flex items-baseline gap-6">
+          <button type="button" onClick={onNew} className="bare-btn">
+            新会话
+          </button>
+          <Dialog.Close className="bare-btn ml-auto">关闭</Dialog.Close>
+        </div>
+      </Dialog.Popup>
+    </Dialog.Portal>
+  </Dialog.Root>
+);
+
 /**
  * 设置弹层:现在**没有需要你填的东西**(密钥在宿主的 env 里),
  * 它是"这台机器上正在发生什么"的一张说明 + 唯一的破坏性动作(清空会话)。
@@ -131,7 +207,7 @@ export const SettingsDialog = ({
 
         <div className="mt-6 flex items-baseline gap-6">
           <button type="button" onClick={onReset} className="bare-btn">
-            清空会话
+            开新会话
           </button>
           <Dialog.Close className="bare-btn ml-auto">关闭</Dialog.Close>
         </div>

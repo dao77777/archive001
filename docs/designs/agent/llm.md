@@ -13,6 +13,9 @@
 | `responses.ts`        | 主路径:`Item` ↔ `/responses`(近乎直通)                        |
 | `chat-completions.ts` | 兼容路径:`Item` ↔ `/chat/completions`(折叠成 message)         |
 | `_domain.ts`          | 全部类型与 wire Schema(不含函数)                              |
+| `service.ts`          | `LlmShape` + `Llm` Tag(契约)                                  |
+| `live.ts`             | `LlmLive`:补缺省值 + 选 wire                                  |
+| `wire/`               | 两条 wire 的实现:`chat-completions.ts` / `responses.ts`       |
 | `_util.ts`            | item 助手、`postJson`、`decodeWire`、`partTextsOf`            |
 | `_constants.ts`       | 厂商名、两条端点、`DEFAULT_SETTINGS`                          |
 
@@ -20,16 +23,20 @@
 
 内部模型就是 `/responses` 的 `input[]` 形状;chat 是把它折叠成 message 的兼容路径。
 
-| `Item`                                   | `/responses`                          | `/chat/completions`                    |
-| ---------------------------------------- | ------------------------------------- | -------------------------------------- |
-| `message(role, text)`                    | `{type:"message", role, content:[…]}` | `{role, content}`                      |
-| `reasoning(text)`                        | `reasoning` item                      | assistant 的 `reasoning_content`       |
-| `function_call(callId, name, arguments)` | 独立 item                             | assistant 的 `tool_calls[]`            |
-| `function_call_output(callId, output)`   | 独立 item                             | `{role:"tool", tool_call_id, content}` |
+| `Item`                                 | `/responses`                            | `/chat/completions`                    |
+| -------------------------------------- | --------------------------------------- | -------------------------------------- |
+| `SYSTEM_MESSAGE(text)`                 | 顶层 `instructions`                     | `{role:"system", content}`             |
+| `USER_MESSAGE(text)`                   | `{type:"message", role:"user", …}`      | `{role:"user", content}`               |
+| `ASSISTANT_MESSAGE(text)`              | `{type:"message", role:"assistant", …}` | assistant 的 `content`                 |
+| `REASONING(text)`                      | `reasoning` item                        | assistant 的 `reasoning_content`       |
+| `FUNCTION_CALL(callId, name, args)`    | 独立 item                               | assistant 的 `tool_calls[]`            |
+| `FUNCTION_CALL_OUTPUT(callId, output)` | 独立 item                               | `{role:"tool", tool_call_id, content}` |
 
 两条路的思维链都是**明文**,所以这里没有"签名 / 密文"这类不透明载荷 —— 回放只需要文本本身。
 
-命名:`Item` 助手跟 `type` 走 —— `functionCallsOf` 取 item,`messageTextsOf` / `reasoningTextsOf` 取文本。
+命名:`Item` 助手跟 `type` 走 —— `functionCallsOf` 取 item,`assistantTextsOf` / `reasoningTextsOf` 取文本。
+`loop` 的事件内容也用同一套名字(`USER_MESSAGE` / `ASSISTANT_MESSAGE` / `REASONING` /
+`FUNCTION_CALL` / `FUNCTION_CALL_OUTPUT`)。
 
 ## 回放契约
 

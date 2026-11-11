@@ -66,8 +66,8 @@ describe("令牌", () => {
 
 describe("NDJSON", () => {
   it("一行一个 JSON,带换行", () => {
-    const text = new TextDecoder().decode(encodeNdjsonLine({ _tag: "answer", text: "好" }));
-    expect(text).toBe('{"_tag":"answer","text":"好"}\n');
+    const text = new TextDecoder().decode(encodeNdjsonLine({ _tag: "ANSWER", text: "好" }));
+    expect(text).toBe('{"_tag":"ANSWER","text":"好"}\n');
     expect(text.split("\n")).toHaveLength(2);
   });
 });

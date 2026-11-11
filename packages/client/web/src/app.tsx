@@ -10,7 +10,7 @@ import {
   THINKING_LEVELS,
   type BehaviorSettings,
 } from "./_constants.ts";
-import { SelectField, SettingsDialog } from "./controls.tsx";
+import { SelectField, SessionsDialog, SettingsDialog } from "./controls.tsx";
 import { previewArgs, type Block } from "./_util.ts";
 import { FolderMark } from "./folder-mark.tsx";
 import { useAgent, type HostState } from "./use-agent.ts";
@@ -32,7 +32,9 @@ export const App = () => {
   const [settings, setSettings] = useState<BehaviorSettings>(loadSettings);
   const [input, setInput] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const { blocks, running, host, send, reset } = useAgent();
+  const [sessionsOpen, setSessionsOpen] = useState(false);
+  const { blocks, running, host, sessions, currentSession, send, openSession, newSession } =
+    useAgent();
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -133,7 +135,17 @@ export const App = () => {
 
             {/* ml-auto 而不是 justify-between:窄屏折行时,右组仍然贴右 */}
             <div className="ml-auto flex flex-wrap items-baseline gap-x-10 gap-y-2">
-              {/* 设置:没有要填的东西,只有"这台机器上正在发生什么"+ 清空会话 */}
+              {/* 会话:archive 里的多段记录,点开切换 */}
+              <button
+                type="button"
+                onClick={() => setSessionsOpen(true)}
+                className="bare-btn"
+                title="archive 里的会话"
+              >
+                会话
+              </button>
+
+              {/* 设置:没有要填的东西,只有"这台机器上正在发生什么"+ 开新会话 */}
               <button
                 type="button"
                 onClick={() => setSettingsOpen(true)}
@@ -178,8 +190,23 @@ export const App = () => {
         onOpenChange={setSettingsOpen}
         host={host}
         onReset={() => {
-          void reset();
+          void newSession();
           setSettingsOpen(false);
+        }}
+      />
+
+      <SessionsDialog
+        open={sessionsOpen}
+        onOpenChange={setSessionsOpen}
+        sessions={sessions}
+        currentSession={currentSession}
+        onOpen={(id) => {
+          setSessionsOpen(false);
+          void openSession(id);
+        }}
+        onNew={() => {
+          setSessionsOpen(false);
+          void newSession();
         }}
       />
     </div>

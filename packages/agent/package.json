@@ -6,7 +6,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./builtin-tools": "./src/loop/builtin-tools.ts"
+    "./live": "./src/live.ts"
   },
   "scripts": {
     "build": "vp pack"

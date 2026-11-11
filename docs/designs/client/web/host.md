@@ -11,7 +11,7 @@
 ```
 dev   浏览器 ── /api/* ──► Vite(519x,页面 + HMR)+ 代理 ──► 宿主(5180,只给 /api)
 prod  浏览器 ── 全部 ───────────────────────────────────► 宿主(5180,dist/ + /api)
-                                                          ├─ agent.run(…, BuiltinTools)
+                                                          ├─ Turn.runTurn → Agent.events / send(…, BuiltinTools)
                                                           └─ DeepSeek(密钥只在这边)
 ```
 
@@ -20,16 +20,16 @@ prod  浏览器 ── 全部 ────────────────�
 
 ## 文件
 
-| 文件                     | 职责                                                                  |
-| ------------------------ | --------------------------------------------------------------------- |
-| `src/host/main.ts`       | 装配:路由 + 页面(prod `dist/`,dev 一句提示)+ `HttpServer` + `launch`  |
-| `src/host/routes.ts`     | `/api/{state,turn,reset}` 三条路由 + `/api/*` 的 JSON 404             |
-| `src/host/session.ts`    | `Session` 服务:一套 `Agent` + 工具实例;`turn` 出事件流,`reset` 换一套 |
-| `src/host/guard.ts`      | 安全闸:`Guard`(全局)+ `RequireToken`(路由级)                          |
-| `src/host/_util.ts`      | 纯判定:`isLoopbackHost` / `isSameOrigin` / `hasToken` / NDJSON        |
-| `src/host/_domain.ts`    | 声明:`/api/turn` 的请求体 Schema、`TurnEvent`、`SessionShape`         |
-| `src/host/_constants.ts` | 端口、绑定地址、令牌 Cookie 名、body 上限、env 名                     |
-| `src/use-agent.ts`       | 浏览器侧唯一的外呼:POST `/api/turn`、读 NDJSON、折成 `Block`          |
+| 文件                     | 职责                                                                           |
+| ------------------------ | ------------------------------------------------------------------------------ |
+| `src/host/main.ts`       | 装配:路由 + 页面(prod `dist/`,dev 一句提示)+ `HttpServer` + `launch`           |
+| `src/host/routes.ts`     | `/api/{state,turn,reset}` 三条路由 + `/api/*` 的 JSON 404                      |
+| `src/host/session.ts`    | `Session` 服务:一套 `Agent` + `Turn` + 工具实例;`turn` 出事件流,`reset` 换一套 |
+| `src/host/guard.ts`      | 安全闸:`Guard`(全局)+ `RequireToken`(路由级)                                   |
+| `src/host/_util.ts`      | 纯判定:`isLoopbackHost` / `isSameOrigin` / `hasToken` / NDJSON                 |
+| `src/host/_domain.ts`    | 声明:`/api/turn` 的请求体 Schema、`TurnEvent`、`SessionShape`                  |
+| `src/host/_constants.ts` | 端口、绑定地址、令牌 Cookie 名、body 上限、env 名                              |
+| `src/use-agent.ts`       | 浏览器侧唯一的外呼:POST `/api/turn`、读 NDJSON、折成 `Block`                   |
 
 ## 请求怎么走
 
@@ -50,23 +50,28 @@ NodeHttpServer ─► HttpRouter(FindMyWay)
 
 ## API
 
-| 路由              | 用途                                                                                                                                                                                         |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /api/state`  | `{ hasKey, cwd }` —— 密钥在不在、工具能碰哪个目录。**不要求令牌,且响应里种下令牌** —— 这就是握手(dev 期页面在 Vite 那边)                                                                     |
-| `POST /api/turn`  | body `{ input, settings: { model?, thinking? } }`;响应 `application/x-ndjson`,一行一个 JSON:`thinking` / `text` / `tool_call` / `tool_result`,末行 `{_tag:"answer"}`;出错是 `{_tag:"error"}` |
-| `POST /api/reset` | 换一套服务端实例 = 清空会话历史                                                                                                                                                              |
+| 路由                      | 用途                                                                                                                                                                                                                                                                       |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/state`          | `{ hasKey, cwd }` —— 密钥在不在、工具能碰哪个目录。**不要求令牌,且响应里种下令牌** —— 这就是握手(dev 期页面在 Vite 那边)                                                                                                                                                   |
+| `GET /api/sessions`       | `{ current, sessions: [{ id, title, at, entries, current }] }`;标题取第一条用户消息,最近活动在前                                                                                                                                                                           |
+| `POST /api/sessions/open` | body `{ id }`;切到该 archive 会话,返回 `{ ok, id, entries }`(`ArchiveEntry[]`)                                                                                                                                                                                             |
+| `POST /api/turn`          | body `{ input, settings: { model?, thinking? } }`;响应 `application/x-ndjson`,一行一个 JSON:`ArchiveEntry` 原样转发(`INBOX_OFFER` 带完整消息,以及 `REASONING` / `ASSISTANT_MESSAGE` / `FUNCTION_CALL`;层级用 id / parentId),末行 `{_tag:"ANSWER"}`;出错是 `{_tag:"ERROR"}` |
+| `POST /api/reset`         | 换一套服务端实例 + `Archive.startSession`,返回 `{ ok, id }`(新会话 id)                                                                                                                                                                                                     |
 
 **为什么 NDJSON**:`/api/turn` 是 POST,`EventSource` 用不了;NDJSON 就是"一行一个 JSON",
 `fetch` 流 + `split("\n")` 即可(注意留半行,见 `use-agent.ts` 的 `buffer`)。
 
 ## 会话
 
-`AgentLive` 建层时就 `Ref.make(history)`,历史没有"清空"接口,所以**一个宿主进程 = 一个会话**,
-`reset` 的做法是**换一套实例**:`Session` 把 `Agent` + 工具建在自己的子 `Scope` 上,reset 开新的、
-关旧的(旧 scope 关闭会中断在飞的那一轮)。
+`AgentLive` 只装配(输出 `Agent` + `Turn`,inbox 是内部实现),**不常驻引擎**;`Session.open` 建一套层,
+每次 `/api/turn` 调 `Turn.runTurn`——起一个 run、跑一轮、关掉它。transcript 在投影里**同一会话内
+跨 run 保留**,所以多轮仍有记忆;`reset` 换一套实例并调用 `Archive.startSession` 开新会话,
+关旧 scope 会停掉在飞的那一轮;`/api/sessions` / `/api/sessions/open` 读的是同一份 archive,
+不换层。
 
-`/api/turn` 的事件流用 `Stream.callback`:这段 effect 跑在**流的 scope** 里,所以
-"观察者塞事件 → 消费者边收边发";浏览器断开 → 请求 fiber 被中断 → scope 关闭 → 模型调用停掉。
+`/api/turn` 的事件流用 `Stream.callback`:`runTurn` 的 `onEvent` 把事件逐行写给浏览器,
+最后补 `answer` / `error` 行(最终回答的正文不再作为 `ASSISTANT_MESSAGE` 重复转发)。
+⚠️ 浏览器断开 = 事件流被中断 → `runTurn` 的 `ensuring` 关掉本轮 run(生成会停),不会留下空转的引擎。
 
 页面挂载时先 `GET /api/state`(拿 cookie)再 `POST /api/reset` —— 于是**刷新 = 新会话**。
 
@@ -91,8 +96,8 @@ NodeHttpServer ─► HttpRouter(FindMyWay)
 
 ## 这层不管
 
-- **流式 token**:事件粒度是"一步"(thinking / tool_call / …),不做逐字流;要做另开 draft。
-- **多会话 / 持久化**:一个进程一个会话,不落盘;`reset` 会打断在飞的那一轮。
+- **流式 token**:事件粒度是"一步"(STEP_START / STEP_END),不做逐字流;要做另开 draft。
+- **多会话 / 持久化**:一个进程一个会话,不落盘;`reset` 会打断常驻循环与在飞的那一轮。
 - **工具审批**:已决定不做,所以宿主目前只在本机回环上跑。
 - **单元测试 HTTP 层**:目前只测 `_util.ts` 的判定;要给路由写集成测试用
   `NodeHttpServer.layerTest`(临时端口 + fetch 客户端)。

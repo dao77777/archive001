@@ -42,7 +42,7 @@ pnpm build && pnpm start
 | `THINKING`                      | 可选,`off` \| `low` \| `high` \| `max`,缺省 `high` |
 | `BASE_URL`                      | 可选,缺省 `https://api.deepseek.com`               |
 
-这四项拼成一份 **`LlmSettings`**,**按次**传给 `agent.run` —— 没有"全局配置服务":
+这四项拼成一份 **`LlmSettings`**,通过 `agent.configure({ settings, tools })` 设置 —— 没有"全局配置服务":
 同一个进程里完全可以换 key、换端点。**只有 `apiKey` 必填**,其余三项省了就用 SDK 的缺省值
 (`resolveSettings` 在服务边界补一次)。
 
@@ -103,7 +103,7 @@ src/
 └── host/             宿主(只跑在 Node 里)
     ├── main.ts         装配:路由 + 静态产物 + NodeHttpServer + launch
     ├── routes.ts       /api/{state,turn,reset}
-    ├── session.ts      会话:一套 Agent + 工具实例,reset = 换一套
+    ├── session.ts      会话:一套 Agent + 工具实例,reset = 换层 + 新 archive session
     ├── guard.ts        安全闸(Host / Origin / 令牌 cookie)
     ├── _util.ts        纯判定(可单测)
     ├── _domain.ts      /api/turn 的请求体 Schema 与事件行
@@ -128,36 +128,46 @@ src/
 ## 用 SDK
 
 ```ts
-import { Effect, Layer, Redacted } from "effect";
-import { NodeServices } from "@effect/platform-node";
-import { Agent, AgentLive, BuiltinTools, BuiltinToolsLive, LlmLive } from "@archive001/agent";
-
-const App = Layer.mergeAll(
-  Layer.provide(LlmLive)(AgentLive), // Agent(不需要任何配置)
-  Layer.provide(NodeServices.layer)(BuiltinToolsLive), // 可选:内置四件套
-  NodeServices.layer,
-);
+import { Effect, Option, Redacted } from "effect";
+import { NodeRuntime } from "@effect/platform-node";
+import { Turn } from "@archive001/agent";
+import { AgentLive } from "@archive001/agent/live"; // Node 侧装配(自带 Llm / archive / 内置工具)
 
 const program = Effect.gen(function* () {
-  const agent = yield* Agent;
-  const tools = yield* BuiltinTools; // 不要工具就传 []
-  // 只有密钥必填;模型 / 档位 / 端点省了就用缺省值
-  const settings = { apiKey: Redacted.make("sk-…") };
-  return yield* agent.run("列一下当前目录", settings, tools, (event) =>
-    Effect.sync(() => console.log(event._tag)),
+  const turn = yield* Turn;
+
+  // 一次调用 = 起一个 run、跑一轮、关掉它;下一轮仍带着同一层的 transcript
+  const answer = yield* turn.runTurn(
+    // 只有密钥必填;模型 / 档位 / 端点省了就用缺省值
+    // `tools: Option.none()` = 用内置四个,`Option.some([...])` = 换成你给的那套
+    { settings: { apiKey: Redacted.make("sk-…") }, tools: Option.none() },
+    { text: "列一下当前目录" },
+    { onEvent: (event) => Effect.log(event._tag) }, // 可省:事件旁路转发
   );
-}).pipe(Effect.provide(App));
+  yield* Effect.log(answer);
+});
+
+NodeRuntime.runMain(program.pipe(Effect.provide(AgentLive)));
 ```
+
+`AgentLive`(`@archive001/agent/live`)自带 `Llm` + 文件 archive + 内置工具;要换 sink / 假 LLM 就用
+`AgentRuntime`(`@archive001/agent`)自己 provide。⚠️ `/live` 这个入口依赖 Node,浏览器侧只能 import 包根。
+真实事件会异步追加到 JSONL,`append` 只保证入队。
+
+`Turn.runTurn` 是常用入口;要超时、取消、多播、按自己的 prompt id 关联,就自己 `agent.run` 拿句柄,
+用 `run.send` + `run.events` 自己订阅(持续运行模式没有解析助手)。Turn 的设计见
+[`docs/designs/agent/turn.md`](docs/designs/agent/turn.md)。
 
 SDK 只导出三类(`packages/agent/src/index.ts`):
 
-| 类            | 内容                                                                                          |
-| ------------- | --------------------------------------------------------------------------------------------- |
-| 服务          | `Agent(Live)` · `Llm(Live)` · `BuiltinTools(Live)`                                            |
-| 类型          | `AgentEvent` · `Item` · `LlmSettings` · `BehaviorSettings` · `Tool` · `LlmError` …            |
-| 缺省值 / 助手 | `DEFAULT_SETTINGS` · `DEFAULT_BASE_URL` · `ThinkingLevel`(Schema)· `makeTool` · `formatError` |
+| 类            | 内容                                                                                                                                                            |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 服务          | `Agent(Live)` · `Turn(Live)` · `Llm(Live)`                                                                                                                      |
+| 类型          | `ArchiveEntry` · `SessionId` · `AgentConfig` · `AgentRunOptions` · `PromptInput` · `TurnInput` · `TurnOptions` · `Item` · `LlmSettings` · `Tool` · `LlmError` … |
+| 读侧          | `Archive.readAll` / `Archive.projection("transcript" \| "inbox")`(转发给 `Projection` 服务)                                                                     |
+| 缺省值 / 助手 | `DEFAULT_SETTINGS` · `DEFAULT_BASE_URL` · `ThinkingLevel`(Schema)· `formatError`                                                                                |
 
-内置工具在子路径 `@archive001/agent/builtin-tools`(依赖 `node:fs` / `child_process`,浏览器不该被拉进来)。
+内置工具(`bash` / `read_file` / `write_file` / `list_dir`)由 `AgentLive` 自己装配:`configure` 不传 `tools` 就用它们,传了就用你给的。
 
 ## 结构
 
@@ -165,7 +175,7 @@ SDK 只导出三类(`packages/agent/src/index.ts`):
 packages/
 ├── agent/                        @archive001/agent(只有 SDK,没有入口程序)
 │   ├── src/index.ts              ★ SDK 入口(只转发)
-│   ├── src/loop/                 循环 + 内置工具
+│   ├── src/loop/                 循环三实体(inbox / 状态机 / 工具执行器)+ 内置工具
 │   ├── src/llm/                  模型层:两条 wire
 │   └── src/_util.ts
 └── client/                       每个客户端一个包
@@ -175,8 +185,9 @@ packages/
     └── tui/  desktop/  mobile/   骨架
 ```
 
-每个目录的 `_constants.ts` / `_domain.ts` / `_util.ts` 分别是**常量 / 类型 / 工具函数**,不含业务逻辑;
-`index.ts` 只做转发。每个包自带 `tsconfig.json`(web 额外开 `DOM`)。
+内核里**一个服务一个目录**(`service.ts` 契约 + `live.ts` 实现),类型与常量跟着服务走;
+包里剩下的 `_domain.ts` / `_constants.ts` / `_util.ts` 只放**跨文件共用**的东西,`index.ts` 只做转发。
+每个包自带 `tsconfig.json`(web 额外开 `DOM`)。
 
 ## 文档
 
