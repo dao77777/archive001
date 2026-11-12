@@ -1,10 +1,9 @@
-// 宿主的纯判定:回环 Host、同源 Origin、令牌、NDJSON 一行。
-// 这些是"安全闸"的全部判据,所以单独测 —— 它们坏了等于后门敞开。
+// 框架层的纯判定:回环 Host、同源 Origin、令牌、NDJSON 一行。
+// 这些是"安全闸"的全部判据 —— 它们坏了等于后门敞开,所以单独测。
 
-import { describe, expect, it } from "vitest";
 import type { HttpServerRequest } from "effect/http";
-import { TOKEN_COOKIE } from "./_constants.ts";
-import { encodeNdjsonLine, hasToken, isLoopbackHost, isSameOrigin } from "./_util.ts";
+import { describe, expect, it } from "vitest";
+import { encodeNdjsonLine, hasToken, isLoopbackHost, isSameOrigin } from "./framework.ts";
 
 /** 只造判定用到的字段,别的一概不管。 */
 const request = (options: {
@@ -57,10 +56,11 @@ describe("同源 Origin", () => {
 });
 
 describe("令牌", () => {
+  const name = "t";
   it("只有同名同值才算", () => {
-    expect(hasToken(request({ cookies: { [TOKEN_COOKIE]: "abc" } }), "abc")).toBe(true);
-    expect(hasToken(request({ cookies: { [TOKEN_COOKIE]: "abc" } }), "abd")).toBe(false);
-    expect(hasToken(request({ cookies: {} }), "abc")).toBe(false);
+    expect(hasToken(request({ cookies: { [name]: "abc" } }), name, "abc")).toBe(true);
+    expect(hasToken(request({ cookies: { [name]: "abc" } }), name, "abd")).toBe(false);
+    expect(hasToken(request({ cookies: {} }), name, "abc")).toBe(false);
   });
 });
 

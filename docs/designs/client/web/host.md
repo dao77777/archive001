@@ -20,33 +20,39 @@ prod  浏览器 ── 全部 ────────────────�
 
 ## 文件
 
-| 文件                     | 职责                                                                           |
-| ------------------------ | ------------------------------------------------------------------------------ |
-| `src/host/main.ts`       | 装配:路由 + 页面(prod `dist/`,dev 一句提示)+ `HttpServer` + `launch`           |
-| `src/host/routes.ts`     | `/api/{state,turn,reset}` 三条路由 + `/api/*` 的 JSON 404                      |
-| `src/host/session.ts`    | `Session` 服务:一套 `Agent` + `Turn` + 工具实例;`turn` 出事件流,`reset` 换一套 |
-| `src/host/guard.ts`      | 安全闸:`Guard`(全局)+ `RequireToken`(路由级)                                   |
-| `src/host/_util.ts`      | 纯判定:`isLoopbackHost` / `isSameOrigin` / `hasToken` / NDJSON                 |
-| `src/host/_domain.ts`    | 声明:`/api/turn` 的请求体 Schema、`TurnEvent`、`SessionShape`                  |
-| `src/host/_constants.ts` | 端口、绑定地址、令牌 Cookie 名、body 上限、env 名                              |
-| `src/use-agent.ts`       | 浏览器侧唯一的外呼:POST `/api/turn`、读 NDJSON、折成 `Block`                   |
+分成**框架**与**业务**两半:`framework.ts` 只认 `effect/http`,换了业务也照样能用;其余文件只写 archive001 自己的事。
+
+| 文件                         | 层     | 职责                                                                                                                                                                                                                                                            |
+| ---------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/host/framework.ts`      | 框架   | 路由助手(`postJson`:body 形状进签名 + 统一 413)、错误(`HTTP_ERR_BAD_REQUEST` / `_UNAUTHORIZED` / `_NOT_FOUND` / `_TOO_LARGE` / `_SERVICE_UNAVAILABLE`,一律 thunk,用时加 `()`)、`ndjson`、安全判据(回环 / 同源 / 令牌 / 令牌 cookie)、启动(`nodeServer` / `run`) |
+| `src/host/api.ts`            | 业务   | 安全闸的**策略**(`Guard` / `RequireToken`)、请求体 Schema、四条路由 + JSON 404                                                                                                                                                                                  |
+| `src/host/session.ts`        | 业务   | `Session` 服务:一套 `Agent` + `Turn` + 工具实例;`turn` 出事件流,`reset` 换一套;`TurnEvent` 等类型                                                                                                                                                               |
+| `src/host/main.ts`           | 装配   | 常量(端口 / 绑定)+ 页面(prod `dist/`,dev 一句提示)+ 把上面几样拼起来交给 `run`                                                                                                                                                                                  |
+| `src/host/framework.test.ts` | 测试   | 框架层纯判定(回环 Host / 同源 Origin / 令牌 / NDJSON)                                                                                                                                                                                                           |
+| `src/use-agent.ts`           | 浏览器 | 唯一的外呼:POST `/api/turn`、读 NDJSON、折成 `Block`                                                                                                                                                                                                            |
+
+`host/` **没有** `_constants` / `_domain` / `_util`:里面的每样东西只有一个使用方,内联比多跳一层更清楚。
+判据与代价见 [`../../../decisions/0087-web-host-flat.md`](../../../decisions/0087-web-host-flat.md)。
 
 ## 请求怎么走
 
 ```
 NodeHttpServer ─► HttpRouter(FindMyWay)
-                    ├─ Guard(全局)   Host 回环?Origin 同源?否则 401
-                    ├─ GET  /api/state ─────────────► 不要求令牌(握手)
-                    ├─ POST /api/turn   ┐ RequireToken
-                    ├─ POST /api/reset  ┘  令牌不对 → 401
-                    ├─ *    /api/*      ─────────────► JSON 404
-                    └─ GET  /*          ─────────────► prod:`dist/`(spa 兜底);dev:只 `/`
+                    ├─ Guard(全局)   Host 回环?Origin 同源?(413 超限)(三条要令牌)否则 401/413
+                    ├─ http-api 层   /api/{state,sessions,sessions/open,turn,reset}
+                    │                端点声明收什么/回什么/错什么,handler 拿解好的 payload
+                    ├─ *    /api/*   ─────────────► JSON 404
+                    └─ GET  /*       ─────────────► prod:`dist/`(spa 兜底);dev:只 `/`
 ```
 
-- 路由 = `HttpRouter.add(method, path, handler)`,返回 **Layer**;`HttpRouter.serve(routes)` 交给
-  `HttpServer`,与 `NodeHttpServer.layer(() => server, { port, host })` 合起来就是整个宿主。
+- 路由是**声明式**的:`HttpApiEndpoint.<method>(标识, 路径, { payload, success, error })` 写清契约,
+  `HttpApiBuilder.group(...).handle(标识, handler)` 实现;`HttpApiBuilder.layer(Api)` 把整组挂到 `HttpRouter` 上。
+  handler 收到的是 `{ payload, params, query, headers, request }` 中**声明过的那些**,形状在签名上。
 - handler 直接 `yield* Session` / `yield* Agent`:依赖走 Layer 图,不再有 `ManagedRuntime`。
-- `/api/turn` 的 body 用 `Schema` 解(`TurnBodySchema`):字段缺失 / 档位写错 → 框架自己回 400。
+- 校验全部由 `Schema` 完成:payload 解不出来 → 400;业务错误用 `Effect.fail({ _tag, error })`,
+  状态码来自 `HttpApiSchema.status(...)`,所以同一个端点能同时有 400 和 503。
+- `/api/turn` 的 `success` 是 `HttpApiSchema.StreamUint8Array({ contentType: "application/x-ndjson; charset=utf-8" })`,
+  handler 直接返回 `Stream<Uint8Array>`(逐块 flush,浏览器边读边渲染)。
 
 ## API
 
@@ -99,5 +105,5 @@ NodeHttpServer ─► HttpRouter(FindMyWay)
 - **流式 token**:事件粒度是"一步"(STEP_START / STEP_END),不做逐字流;要做另开 draft。
 - **多会话 / 持久化**:一个进程一个会话,不落盘;`reset` 会打断常驻循环与在飞的那一轮。
 - **工具审批**:已决定不做,所以宿主目前只在本机回环上跑。
-- **单元测试 HTTP 层**:目前只测 `_util.ts` 的判定;要给路由写集成测试用
+- **单元测试 HTTP 层**:目前只测 `framework.ts` 里那几个纯判定;要给路由写集成测试用
   `NodeHttpServer.layerTest`(临时端口 + fetch 客户端)。

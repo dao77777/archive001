@@ -9,8 +9,6 @@
 // 浏览器侧只能 import 包根(`@archive001/agent` 的类型与纯值)。
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { homedir } from "node:os";
-import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { Layer } from "effect";
 import type { Archive } from "./archive/service.ts";
@@ -29,18 +27,12 @@ import type { Turn } from "./turn/service.ts";
 import { TurnLive } from "./turn/live.ts";
 
 // ---------------------------------------------------------------------------
-// 常量
-// ---------------------------------------------------------------------------
-/** 所有客户端共用的 archive 文件。 */
-const ARCHIVE_FILE = join(homedir(), ".local/state/archive001/archive.jsonl");
-
-// ---------------------------------------------------------------------------
 // 构建好的服务(名字在包边界换过:内部叫 Loop,对外叫 Agent)
 // ---------------------------------------------------------------------------
 /** `ArchiveRuntime` + 投影 + 文件 sink + 平台服务:文件打不开按缺陷处理。 */
 export const ArchiveLive: Layer.Layer<Archive> = ArchiveRuntime.pipe(
   Layer.provide(ProjectionLive),
-  Layer.provide(FileSinkLive(ARCHIVE_FILE)),
+  Layer.provide(FileSinkLive),
   Layer.provide(NodeServices.layer),
   Layer.orDie,
 );

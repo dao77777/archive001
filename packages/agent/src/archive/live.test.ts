@@ -7,6 +7,7 @@ import { ProjectionLive } from "./projection/live.ts";
 import {
   ArchiveError,
   makeArchiveEntryId,
+  makeSessionId,
   newArchiveEntryId,
   type ArchiveEntry,
 } from "./service.ts";
@@ -32,6 +33,7 @@ const entry = (id: string): ArchiveEntry => ({
   at: 0,
   _tag: "ENGINE_START",
   id: makeArchiveEntryId(id),
+  sessionId: makeSessionId("s1"),
 });
 
 const withArchive = (sink: Layer.Layer<Sink>) =>

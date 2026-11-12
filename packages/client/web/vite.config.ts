@@ -7,7 +7,7 @@ import { defineConfig } from "vite-plus";
 //
 // ⚠️ 页面归 Vite,**API 归宿主**(`src/host/`,Effect HTTP,默认 5180):
 // dev 期 `/api/*` 代理过去,宿主就不用再托管 Vite 的中间件了。
-// 端口与 `src/host/_constants.ts` 的 `HOST_PORT` 保持一致。
+// 端口与 `src/host/main.ts` 的 `PORT` 保持一致(宿主默认 5180)。
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {

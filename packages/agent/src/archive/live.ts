@@ -26,7 +26,6 @@ import {
   type ArchiveEntry,
   ArchiveError,
   type ArchiveShape,
-  LEGACY_SESSION_ID,
   newSessionId,
   type SessionId,
 } from "./service.ts";
@@ -78,7 +77,7 @@ export const ArchiveRuntime: Layer.Layer<Archive, never, Sink | Projection> = La
      */
     const cacheRef = yield* Ref.make<ReadonlyArray<ArchiveEntry>>([]);
     /** 当前会话:新事件都挂到它上面。 */
-    const sessionRef = yield* TxRef.make<SessionId>(LEGACY_SESSION_ID);
+    const sessionRef = yield* TxRef.make<SessionId>(newSessionId());
 
     // -----------------------------------------------------------------------
     // 方法:takeBatch / writeBatch / drain
@@ -132,16 +131,12 @@ export const ArchiveRuntime: Layer.Layer<Archive, never, Sink | Projection> = La
      * sink 写失败也不会让读挂掉。
      */
     const initial = yield* sinkSvc.read.pipe(Effect.orDie);
-    /** 旧文件没有 sessionId:归到 legacy;新条目在 append 时补当前会话。 */
-    const normalized: ReadonlyArray<ArchiveEntry> = initial.map((entry) =>
-      entry.sessionId === undefined ? { ...entry, sessionId: LEGACY_SESSION_ID } : entry,
-    );
-    const last = normalized[normalized.length - 1];
+    const last = initial[initial.length - 1];
     const initialSession = last?.sessionId ?? newSessionId();
-    yield* Ref.set(cacheRef, normalized);
+    yield* Ref.set(cacheRef, initial);
     yield* TxRef.set(sessionRef, initialSession);
     /** 同一份底稿交给投影:重置后全量折叠,之后只 `advance` 增量。 */
-    yield* projectionSvc.init(normalized);
+    yield* projectionSvc.init(initial);
     /** 默认回到最后一段会话;没有历史就开一段新的。 */
     yield* projectionSvc.setSession(initialSession);
 
@@ -224,8 +219,8 @@ export const ArchiveRuntime: Layer.Layer<Archive, never, Sink | Projection> = La
       const current = yield* TxRef.get(sessionRef);
       const seen: Array<SessionId> = [];
       for (const entry of entries) {
-        const sessionId = entry.sessionId ?? LEGACY_SESSION_ID;
-        if (!seen.includes(sessionId)) seen.push(sessionId);
+        if (entry.sessionId === undefined) continue;
+        if (!seen.includes(entry.sessionId)) seen.push(entry.sessionId);
       }
       if (!seen.includes(current)) seen.push(current);
       return seen;

@@ -12,7 +12,7 @@ export interface HostState {
   readonly cwd: string;
 }
 
-/** 会话列表的一行(与 `src/host/_domain.ts` 对齐)。 */
+/** 会话列表的一行(与 `src/host/session.ts` 的 `SessionSummary` 对齐)。 */
 export interface SessionSummary {
   readonly id: string;
   readonly title: string;

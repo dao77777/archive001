@@ -223,13 +223,21 @@ describe("archive 投影", () => {
         at: 1,
         _tag: "INBOX_OFFER",
         id: newArchiveEntryId(),
+        sessionId: makeSessionId("s1"),
         message: {
           _tag: "FUNCTION_CALL_OUTPUT",
           id: "r1",
           payload: { callId: "call_x", name: "bash", output: "迟到" },
         },
       },
-      { v: 1, at: 2, _tag: "INBOX_TAKE", id: newArchiveEntryId(), messageIds: ["r1"] },
+      {
+        v: 1,
+        at: 2,
+        _tag: "INBOX_TAKE",
+        id: newArchiveEntryId(),
+        sessionId: makeSessionId("s1"),
+        messageIds: ["r1"],
+      },
     ];
 
     const projection = await Effect.runPromise(project(entries));
@@ -245,6 +253,7 @@ describe("archive 投影", () => {
       at: 1,
       _tag: "INBOX_OFFER",
       id: newArchiveEntryId(),
+      sessionId: makeSessionId("s1"),
       message: { _tag: "USER_MESSAGE", id, payload: { text: `第 ${id} 条` } },
     });
 

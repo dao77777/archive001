@@ -31,6 +31,10 @@
 | `_domain.ts`    | **跨文件共用**的类型 / Schema / 错误类 | **只有声明**,且**至少两个文件用**;自己一个文件用的放回那个文件 | `Item` / `LlmError`(llm)、`ArchiveEntry`(archive)        |
 | `_util.ts`      | 跨模块共用的小助手                     | 纯函数 / 构造器,被**至少两处**或**公开 API** 用                | `formatError`、`paint`、`previewArguments`               |
 
+**唯一不按三件套走的地方**:`packages/client/web/src/host/`(`main` / `api` / `session` 三个文件,
+常量与纯判定内联)。那里的东西每样只有一个使用方,拆出来只是形式;取舍见
+[`../decisions/0087-web-host-flat.md`](../decisions/0087-web-host-flat.md)。
+
 一条有意为之的例外,别当成错误:
 
 **模块内的私有辅助留在模块里**(`chat-completions.ts` 的 `toWireTool`、`responses.ts` 的 `toWireItem`、

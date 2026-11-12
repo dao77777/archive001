@@ -8,11 +8,11 @@
 
 ## 文件
 
-| 位置                  | 契约                                                                                                                                            | 实现                                                    |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| `archive/`(根)        | `service.ts`:`ArchiveShape` + `Archive`、`ArchiveEntryId` + 构造器、`ArchiveEntryPayloads` / `ArchiveEntryTag` / `ArchiveEntry`、`ArchiveError` | `live.ts`:`ArchiveLive`(缓存 / worker / drain / append) |
-| `archive/sink/`       | `service.ts`:`SinkShape` + `Sink`                                                                                                               | `file.ts`:`FileSinkLive`、`memory.ts`:`MemorySinkLive`  |
-| `archive/projection/` | `service.ts`:`InboxProjection` / `Projections`、`ProjectionShape` + `Projection`                                                                | `live.ts`:`ProjectionLive`(STM 折叠)                    |
+| 位置                  | 契约                                                                                                                                            | 实现                                                                 |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `archive/`(根)        | `service.ts`:`ArchiveShape` + `Archive`、`ArchiveEntryId` + 构造器、`ArchiveEntryPayloads` / `ArchiveEntryTag` / `ArchiveEntry`、`ArchiveError` | `live.ts`:`ArchiveLive`(缓存 / worker / drain / append)              |
+| `archive/sink/`       | `service.ts`:`SinkShape`(只有 `read` / `write`)+ `Sink`                                                                                         | `file.ts`:`FileSinkLive`(一路径一文件)、`memory.ts`:`MemorySinkLive` |
+| `archive/projection/` | `service.ts`:`InboxProjection` / `Projections`、`ProjectionShape` + `Projection`                                                                | `live.ts`:`ProjectionLive`(STM 折叠)                                 |
 
 ## 职责
 
@@ -99,14 +99,19 @@ interface SinkShape {
 ## 文件
 
 ```
-~/.local/state/archive001/archive.jsonl
+~/.local/state/archive001/sessions/
+├── b6818317-52e7-4013-ae9b-9f8d2369a180.jsonl   ← 一个会话一个文件
+└── 0f2c…-.jsonl
 ```
 
-- 目录 `0700`、文件 `0600`；
-- 只追加（`flag: "a"`），单 writer；
-- 不 fsync；关闭只保证写进 sink，不保证落盘；
-- 所有客户端 / web 会话共用这一个文件;会话由 `sessionId` 分组,不是多个文件;
-- 进程被 `kill -9` 时，队列里未写的条目会丢——这是 fire-and-forget 的代价。
+- **文件名 = 会话 id**(只留 `[A-Za-z0-9_-]`;被改过的补短哈希,防 `/`、`..` 逃出目录与撞名);
+- 写:一批条目按 `sessionId` 分组,各自追加到自己的文件;路径由 `file.ts` 固定,**调用方不知道写到哪**;
+- 读:目录下每个 `*.jsonl`,各自解析后按 `at` **稳定**归并
+  (`ArchiveRuntime` 用"最后一条"决定默认回到哪段会话,所以不能拿目录顺序凑);
+- **不兼容旧格式**:条目没有 `sessionId` 直接失败,没有"兜底会话";分文件之前的数据已删除;
+- 目录 `0700`、文件 `0600`;只追加(`flag: "a"`),单 writer;
+- 不 fsync;关闭只保证写进 sink,不保证落盘;
+- 进程被 `kill -9` 时,队列里未写的条目会丢——这是 fire-and-forget 的代价。
 
 ## 关闭:worker 自己的 finalizer
 

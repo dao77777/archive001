@@ -35,7 +35,6 @@ export const makeSessionId = Brand.nominal<SessionId>();
 export const newSessionId = (): SessionId => makeSessionId(crypto.randomUUID());
 
 /** 没有 `sessionId` 的旧条目归到这里(文件迁移用,不是正常新会话)。 */
-export const LEGACY_SESSION_ID: SessionId = makeSessionId("legacy");
 
 /**
  * agent 向外发出的事件流。
@@ -111,7 +110,7 @@ export type ArchiveEntry<T extends ArchiveEntryTag = ArchiveEntryTag> = T extend
       readonly _tag: T;
       /** 本事件 / 生命周期节点的 id。 */
       readonly id: ArchiveEntryId;
-      /** 所属会话。旧文件里的条目没有;`Archive` 读入时会补 `LEGACY_SESSION_ID`。 */
+      /** 所属会话。`Archive.append` 打标;从 sink 读入的条目一律带它。 */
       readonly sessionId?: SessionId;
       /** 所属容器;顶层事件(engine / inbox)没有。 */
       readonly parentId?: ArchiveEntryId;

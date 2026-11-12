@@ -11,7 +11,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { Effect, Layer, Match, TxRef } from "effect";
-import { LEGACY_SESSION_ID, type ArchiveEntry, type SessionId } from "../service.ts";
+import { newSessionId, type ArchiveEntry, type SessionId } from "../service.ts";
 import type { FunctionCall, Item } from "../../llm/_domain.ts";
 import { Projection, type InboxProjection, type Projections } from "./service.ts";
 import type { InboxMessage } from "../../loop/inbox/service.ts";
@@ -22,8 +22,13 @@ import type { InboxMessage } from "../../loop/inbox/service.ts";
 /** 这一批里有没有要接手的条目。 */
 const hasEntries = (entries: ReadonlyArray<ArchiveEntry>): boolean => entries.length > 0;
 
-/** 条目属于哪个会话;旧条目没有 sessionId 时归到 legacy。 */
-const sessionOf = (entry: ArchiveEntry): SessionId => entry.sessionId ?? LEGACY_SESSION_ID;
+/** 条目属于哪个会话。进投影的条目都已由 `Archive.append` 打标;没有就是 bug。 */
+const sessionOf = (entry: ArchiveEntry): SessionId => {
+  if (entry.sessionId === undefined) {
+    throw new Error(`投影收到没有 sessionId 的条目(${entry._tag} ${entry.id})`);
+  }
+  return entry.sessionId;
+};
 
 /** 按 id 摘掉一条消息,返回摘到的那条(没有就是 `undefined`)。 */
 const removeById = (
@@ -71,7 +76,7 @@ export const ProjectionLive: Layer.Layer<Projection> = Layer.effect(
     /** 所有已接手的条目(跨会话):切会话时从这里重折。 */
     const allEntriesRef = yield* TxRef.make<ReadonlyArray<ArchiveEntry>>([]);
     /** 当前投影的是哪一段会话。 */
-    const currentSessionRef = yield* TxRef.make<SessionId>(LEGACY_SESSION_ID);
+    const currentSessionRef = yield* TxRef.make<SessionId>(newSessionId());
 
     // -----------------------------------------------------------------------
     // 方法:takeMessage / foldEntry / fold
@@ -229,7 +234,7 @@ export const ProjectionLive: Layer.Layer<Projection> = Layer.effect(
     const init = (entries: ReadonlyArray<ArchiveEntry>): Effect.Effect<void> =>
       Effect.gen(function* () {
         const last = entries[entries.length - 1];
-        const current = last === undefined ? LEGACY_SESSION_ID : sessionOf(last);
+        const current = last === undefined ? newSessionId() : sessionOf(last);
 
         yield* TxRef.set(allEntriesRef, entries);
         yield* TxRef.set(currentSessionRef, current);

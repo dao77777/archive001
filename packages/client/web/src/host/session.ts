@@ -1,10 +1,10 @@
 // **会话**:一个宿主进程管理一套层 + archive 里的多段会话。
 //
-// 每一轮由 `Turn.runTurn` 起一个 run、跑完关掉;transcript 在投影里**同一会话内跨 run**保留,
+// 每轮由 `Turn.runTurn` 起一个 run、跑完关掉;transcript 在投影里**同一会话内跨 run**保留,
 // 所以多轮仍有记忆。`sessions` 列 archive 里的会话,`open` 切过去,`reset` 换层 + 开新会话。
 //
-// 一次 `turn` = 一个事件流:`runTurn` 把事件交给 onEvent(塞进 Queue),answer / error 各补一行,
-// 队列 shutdown 即流结束。⚠️ 浏览器断开 = 中断 `runTurn`;它的 `ensuring` 会关掉本轮 run。
+// 一次 `turn` = 一个事件流:`runTurn` 把事件塞进 Queue,answer / error 各补一行,队列结束即流结束。
+// ⚠️ 浏览器断开 = 中断 `runTurn`;它的 `ensuring` 会关掉本轮 run。
 
 import {
   Archive,
@@ -18,14 +18,54 @@ import {
 import { AgentLive } from "@archive001/agent/live";
 import { NodeServices } from "@effect/platform-node";
 import { Context, Effect, Exit, Layer, Option, Queue, Ref, Scope, Stream } from "effect";
-import type { SessionShape, SessionSummary, TurnEvent } from "./_domain.ts";
+
+/** 事件流的一行:`ArchiveEntry` 原样转发,外加两种终止行。 */
+export type TurnEvent =
+  | ArchiveEntry
+  | { readonly _tag: "ANSWER"; readonly text: string }
+  | { readonly _tag: "ERROR"; readonly text: string };
+
+/** 会话列表里的一行(浏览器侧同名字段,见 `../use-agent.ts`)。 */
+export interface SessionSummary {
+  readonly id: string;
+  /** 第一条用户消息的第一行;没有就显示"新会话"。 */
+  readonly title: string;
+  /** 最后一条条目的时间(epoch ms)。 */
+  readonly at: number;
+  readonly entries: number;
+  readonly current: boolean;
+}
+
+/** 宿主对外的会话能力:一套实例 + 多个 archive 会话。 */
+export interface SessionShape {
+  /** 一次请求 = 一个事件流(最后一行是 answer 或 error)。 */
+  readonly turn: (input: string, settings: LlmSettings) => Stream.Stream<TurnEvent>;
+  /** 开新会话(换一套层并 `Archive.startSession`),返回新 id。 */
+  readonly reset: Effect.Effect<SessionId>;
+  /** 列出 archive 里的会话(最近活动在前)。 */
+  readonly sessions: Effect.Effect<ReadonlyArray<SessionSummary>>;
+  /** 当前会话 id。 */
+  readonly current: Effect.Effect<SessionId>;
+  /** 切到某个会话,返回它的原始条目。 */
+  readonly open: (sessionId: SessionId) => Effect.Effect<ReadonlyArray<ArchiveEntry>>;
+}
 
 export class Session extends Context.Service<Session, SessionShape>()("archive001/web/Session") {}
 
 /** 一套 `Agent` + `Turn`(自带 Llm / archive / 内置工具)+ 平台服务。 */
-const makeInstances = () => {
-  // `AgentLive` 自带 `Llm` / 文件 archive / 内置工具;平台服务留给宿主自己用
-  return Layer.mergeAll(AgentLive, NodeServices.layer);
+const makeInstances = () => Layer.mergeAll(AgentLive, NodeServices.layer);
+
+/** 列表标题:第一条用户消息的第一行,太长就截断。 */
+const titleOf = (entries: ReadonlyArray<ArchiveEntry>): string => {
+  const first = entries.find(
+    (entry) => entry._tag === "INBOX_OFFER" && entry.message._tag === "USER_MESSAGE",
+  );
+  const text =
+    first?._tag === "INBOX_OFFER" && first.message._tag === "USER_MESSAGE"
+      ? (first.message.payload.text.trim().split("\n")[0] ?? "")
+      : "";
+  if (text.length === 0) return "新会话";
+  return text.length > 48 ? `${text.slice(0, 48)}…` : text;
 };
 
 export const SessionLive: Layer.Layer<Session> = Layer.effect(Session)(
@@ -116,26 +156,12 @@ export const SessionLive: Layer.Layer<Session> = Layer.effect(Session)(
         return yield* archive.readSession(sessionId);
       });
 
-    /** 会话列表:标题取第一条用户消息,时间取最后一条条目;最近活动在前。 */
+    /** 会话列表:最近活动在前,当前会话置顶。 */
     const sessions: Effect.Effect<ReadonlyArray<SessionSummary>> = Effect.gen(function* () {
       const archive = yield* archiveOf;
       const ids = yield* archive.sessions;
       const currentId = yield* archive.currentSession;
       const all = yield* archive.readAll;
-
-      const titleOf = (entries: ReadonlyArray<ArchiveEntry>): string => {
-        const offer = entries.find(
-          (entry) => entry._tag === "INBOX_OFFER" && entry.message._tag === "USER_MESSAGE",
-        );
-        if (offer === undefined || offer._tag !== "INBOX_OFFER") return "新会话";
-        if (offer.message._tag !== "USER_MESSAGE") return "新会话";
-        const firstLine = offer.message.payload.text.trim().split("\n")[0] ?? "";
-        return firstLine.length === 0
-          ? "新会话"
-          : firstLine.length > 48
-            ? `${firstLine.slice(0, 48)}…`
-            : firstLine;
-      };
 
       return ids
         .map((id): SessionSummary => {
